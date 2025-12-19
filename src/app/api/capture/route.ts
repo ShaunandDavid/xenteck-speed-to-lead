@@ -79,22 +79,5 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET() {
-  const redis = Redis.fromEnv()
-  const today = new Date().toISOString().split('T')[0]
-
-  const allCount = await redis.zcard('leads:all')
-  const todayCount = await redis.zcard(`leads:${today}`)
-  const allMembers = await redis.zrange('leads:all', 0, -1)
-
-  return Response.json({
-    status: 'debug',
-    leads_all_count: allCount,
-    leads_today_count: todayCount,
-    leads_all_members: allMembers,
-    today_key: `leads:${today}`,
-    env_check: {
-      has_url: !!process.env.UPSTASH_REDIS_REST_URL,
-      has_token: !!process.env.UPSTASH_REDIS_REST_TOKEN
-    }
-  })
+  return Response.json({ status: 'ok', service: 'capture', runtime: 'edge' })
 }

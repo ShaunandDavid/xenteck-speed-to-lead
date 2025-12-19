@@ -6,6 +6,10 @@
 
 import { Redis } from '@upstash/redis'
 
+// Force dynamic - no caching
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 export async function GET() {
   try {
     const redis = Redis.fromEnv()
@@ -48,7 +52,7 @@ export async function GET() {
     const smsCount = await redis.llen('sms:history') || 0
     const emailCount = await redis.llen('email:history') || 0
 
-    return Response.json({
+    const responseData = {
       date: today,
       total_leads_today: totalToday,
       total_leads_all_time: totalAllTime,
@@ -76,10 +80,23 @@ export async function GET() {
         status: lead.status,
         created_at: lead.created_at
       }))
+    }
+
+    return new Response(JSON.stringify(responseData), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+      },
     })
 
   } catch (error) {
     console.error('Stats error:', error)
-    return Response.json({ error: 'Failed to get stats' }, { status: 500 })
+    return new Response(JSON.stringify({ error: 'Failed to get stats' }), {
+      status: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store',
+      },
+    })
   }
 }
