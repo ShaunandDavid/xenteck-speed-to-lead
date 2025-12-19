@@ -2,37 +2,30 @@
  * STATS API
  * =========
  * Returns speed-to-lead metrics for dashboard.
- * 
- * Metrics:
- * - SFT (Speed-to-First-Touch) p50/p95/p99
- * - Total leads today
- * - Target hit rate (% under 5s)
- * - Recent leads with latencies
  */
 
 import { Redis } from '@upstash/redis'
-import { NextRequest } from 'next/server'
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
     const redis = Redis.fromEnv()
-    
-    // Get today's lead IDs from set
     const today = new Date().toISOString().split('T')[0]
+    
+    // Get lead IDs from sets
     const todayLeadIds = await redis.smembers(`leads:${today}`) as string[]
     const allLeadIds = await redis.smembers('leads:all') as string[]
     
-    // Fetch lead data
+    // Fetch lead data (limit to 100)
     const leads = await Promise.all(
       allLeadIds.slice(0, 100).map(async (leadId) => {
         const data = await redis.hgetall(`lead:${leadId}`)
-        return data as Record<string, string>
+        return data as Record<string, string> | null
       })
     )
     
-    const todayLeads = leads.filter(lead =>
-      lead && todayLeadIds.includes(lead.id)
-    )
+    // Filter out nulls and get today's leads
+    const validLeads = leads.filter(lead => lead && lead.id) as Record<string, string>[]
+    const todayLeads = validLeads.filter(lead => todayLeadIds.includes(lead.id))
     
     // Calculate latency metrics
     const latencies = todayLeads
@@ -51,13 +44,13 @@ export async function GET(req: NextRequest) {
       : '0'
     
     // Get SMS and Email history counts
-    const smsCount = await redis.llen('sms:history')
-    const emailCount = await redis.llen('email:history')
+    const smsCount = await redis.llen('sms:history') || 0
+    const emailCount = await redis.llen('email:history') || 0
     
     return Response.json({
       date: today,
       total_leads_today: todayLeads.length,
-      total_leads_all_time: leads.length,
+      total_leads_all_time: validLeads.length,
       latency_metrics: {
         p50_ms: p50,
         p95_ms: p95,
@@ -86,9 +79,6 @@ export async function GET(req: NextRequest) {
     
   } catch (error) {
     console.error('Stats error:', error)
-    return Response.json(
-      { error: 'Failed to get stats' },
-      { status: 500 }
-    )
+    return Response.json({ error: 'Failed to get stats' }, { status: 500 })
   }
 }
