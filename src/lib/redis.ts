@@ -49,8 +49,8 @@ export interface Lead {
 export async function getLead(leadId: string): Promise<Lead | null> {
   const redis = getRedis()
   const data = await redis.hgetall(`lead:${leadId}`)
-  if (!data || !data.id) return null
-  return data as Lead
+  if (!data || Object.keys(data).length === 0) return null
+  return data as unknown as Lead
 }
 
 export async function updateLead(leadId: string, updates: Partial<Lead>): Promise<void> {
