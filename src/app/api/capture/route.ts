@@ -44,13 +44,10 @@ export async function POST(req: NextRequest) {
       created_at: new Date().toISOString()
     }
 
-    // Pipeline: single round-trip for all writes
-    await redis.pipeline()
-      .hset(`lead:${leadId}`, leadData)
-      .zadd('leads:all', { score: timestamp, member: leadId })
-      .zadd(`leads:${today}`, { score: timestamp, member: leadId })
-      .expire(`leads:${today}`, 60 * 60 * 24 * 30) // 30 day TTL on daily sets
-      .exec()
+    // Store lead data and track in sorted sets
+    await redis.hset(`lead:${leadId}`, leadData)
+    await redis.zadd('leads:all', { score: timestamp, member: leadId })
+    await redis.zadd(`leads:${today}`, { score: timestamp, member: leadId })
 
     // Fire hot router (non-blocking)
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `https://${process.env.VERCEL_URL}`
