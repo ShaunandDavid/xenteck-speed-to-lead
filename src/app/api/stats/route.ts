@@ -10,47 +10,48 @@ export async function GET() {
   try {
     const redis = Redis.fromEnv()
     const today = new Date().toISOString().split('T')[0]
-    
-    // Get lead IDs from sets
-    const todayLeadIds = await redis.smembers(`leads:${today}`) as string[]
-    const allLeadIds = await redis.smembers('leads:all') as string[]
-    
-    // Fetch lead data (limit to 100)
+
+    // Get counts efficiently
+    const totalAllTime = await redis.zcard('leads:all') || 0
+    const totalToday = await redis.zcard(`leads:${today}`) || 0
+
+    // Get recent leads (sorted by timestamp, newest first)
+    const recentLeadIds = await redis.zrange(`leads:${today}`, 0, 19, { rev: true }) as string[]
+
+    // Fetch lead data for today's leads
     const leads = await Promise.all(
-      allLeadIds.slice(0, 100).map(async (leadId) => {
+      recentLeadIds.map(async (leadId) => {
         const data = await redis.hgetall(`lead:${leadId}`)
         return data as Record<string, string> | null
       })
     )
-    
-    // Filter out nulls and get today's leads
+
     const validLeads = leads.filter(lead => lead && lead.id) as Record<string, string>[]
-    const todayLeads = validLeads.filter(lead => todayLeadIds.includes(lead.id))
-    
-    // Calculate latency metrics
-    const latencies = todayLeads
+
+    // Calculate latency metrics from today's leads
+    const latencies = validLeads
       .map(lead => parseInt(lead.total_latency_ms || '0'))
       .filter(l => l > 0)
       .sort((a, b) => a - b)
-    
+
     const p50 = latencies[Math.floor(latencies.length * 0.5)] || 0
     const p95 = latencies[Math.floor(latencies.length * 0.95)] || 0
     const p99 = latencies[Math.floor(latencies.length * 0.99)] || 0
-    
+
     // Target hit rate
     const under5s = latencies.filter(l => l < 5000).length
-    const hitRate = latencies.length > 0 
+    const hitRate = latencies.length > 0
       ? ((under5s / latencies.length) * 100).toFixed(1)
       : '0'
-    
+
     // Get SMS and Email history counts
     const smsCount = await redis.llen('sms:history') || 0
     const emailCount = await redis.llen('email:history') || 0
-    
+
     return Response.json({
       date: today,
-      total_leads_today: todayLeads.length,
-      total_leads_all_time: validLeads.length,
+      total_leads_today: totalToday,
+      total_leads_all_time: totalAllTime,
       latency_metrics: {
         p50_ms: p50,
         p95_ms: p95,
@@ -66,7 +67,7 @@ export async function GET() {
         sms_sent: smsCount,
         emails_sent: emailCount
       },
-      recent_leads: todayLeads.slice(0, 10).map(lead => ({
+      recent_leads: validLeads.slice(0, 10).map(lead => ({
         id: lead.id,
         name: lead.name,
         source: lead.source,
@@ -76,7 +77,7 @@ export async function GET() {
         created_at: lead.created_at
       }))
     })
-    
+
   } catch (error) {
     console.error('Stats error:', error)
     return Response.json({ error: 'Failed to get stats' }, { status: 500 })
