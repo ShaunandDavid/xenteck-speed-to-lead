@@ -9,6 +9,7 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        // XenTeck brand colors
         xenteck: {
           blue: '#00A3E0',
           dark: '#0a0a0a',

@@ -1,28 +1,87 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
+
+interface Slot {
+  start: string
+  end: string
+}
 
 export default function BookingPage() {
   const params = useParams()
   const leadId = params.leadId as string
-  const [booked, setBooked] = useState(false)
+  
+  const [slots, setSlots] = useState<Slot[]>([])
+  const [loading, setLoading] = useState(true)
   const [booking, setBooking] = useState(false)
+  const [booked, setBooked] = useState<{ start: string; link: string } | null>(null)
+  const [error, setError] = useState<string | null>(null)
   
-  const slots = [
-    { day: 'Tomorrow', times: ['9:00 AM', '10:00 AM', '11:00 AM', '2:00 PM', '3:00 PM'] },
-    { day: 'Day After', times: ['9:00 AM', '10:30 AM', '1:00 PM', '4:00 PM'] }
-  ]
+  useEffect(() => {
+    fetchSlots()
+  }, [])
   
-  const bookSlot = async (day: string, time: string) => {
-    setBooking(true)
-    // In production, this would call /api/book
-    await new Promise(r => setTimeout(r, 1000))
-    setBooked(true)
-    setBooking(false)
+  const fetchSlots = async () => {
+    try {
+      const res = await fetch('/api/book?days=7')
+      const data = await res.json()
+      setSlots(data.slots || [])
+    } catch (err) {
+      setError('Failed to load available times')
+    } finally {
+      setLoading(false)
+    }
   }
   
+  const bookSlot = async (slot: Slot) => {
+    setBooking(true)
+    setError(null)
+    
+    try {
+      const res = await fetch('/api/book', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          leadId,
+          slotStart: slot.start,
+          slotEnd: slot.end,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+        })
+      })
+      
+      const data = await res.json()
+      
+      if (data.status === 'booked') {
+        setBooked({ start: slot.start, link: data.eventLink })
+      } else {
+        setError(data.error || 'Booking failed')
+      }
+    } catch (err) {
+      setError('Failed to book appointment')
+    } finally {
+      setBooking(false)
+    }
+  }
+  
+  const formatSlot = (isoString: string) => {
+    const date = new Date(isoString)
+    return {
+      day: date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' }),
+      time: date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+    }
+  }
+  
+  // Group slots by day
+  const slotsByDay = slots.reduce((acc, slot) => {
+    const day = new Date(slot.start).toDateString()
+    if (!acc[day]) acc[day] = []
+    acc[day].push(slot)
+    return acc
+  }, {} as Record<string, Slot[]>)
+  
   if (booked) {
+    const { day, time } = formatSlot(booked.start)
     return (
       <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-gray-900 rounded-2xl p-8 text-center">
@@ -32,7 +91,20 @@ export default function BookingPage() {
             </svg>
           </div>
           <h1 className="text-2xl font-bold mb-2">You're Booked!</h1>
-          <p className="text-gray-400">We'll send you a calendar invite shortly.</p>
+          <p className="text-gray-400 mb-6">
+            {day} at {time}
+          </p>
+          <p className="text-sm text-gray-500 mb-6">
+            You'll receive a calendar invite shortly. Looking forward to speaking with you!
+          </p>
+          <a 
+            href={booked.link}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-medium transition"
+          >
+            View Calendar Event
+          </a>
         </div>
       </div>
     )
@@ -40,32 +112,63 @@ export default function BookingPage() {
   
   return (
     <div className="min-h-screen bg-gray-950 text-white p-4">
-      <div className="max-w-2xl mx-auto pt-8">
-        <div className="text-center mb-8">
+      <div className="max-w-2xl mx-auto">
+        {/* Header */}
+        <div className="text-center mb-8 pt-8">
           <h1 className="text-3xl font-bold mb-2">Pick a Time</h1>
           <p className="text-gray-400">30-minute discovery call with XenTeck</p>
         </div>
         
-        {slots.map((slot) => (
-          <div key={slot.day} className="mb-6">
-            <h2 className="text-lg font-semibold mb-3 text-gray-300">{slot.day}</h2>
+        {/* Error */}
+        {error && (
+          <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-6 text-red-400 text-center">
+            {error}
+          </div>
+        )}
+        
+        {/* Loading */}
+        {loading && (
+          <div className="flex items-center justify-center py-12">
+            <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+          </div>
+        )}
+        
+        {/* Slots */}
+        {!loading && Object.entries(slotsByDay).map(([day, daySlots]) => (
+          <div key={day} className="mb-6">
+            <h2 className="text-lg font-semibold mb-3 text-gray-300">
+              {new Date(day).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+            </h2>
             <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-              {slot.times.map((time) => (
-                <button
-                  key={time}
-                  onClick={() => bookSlot(slot.day, time)}
-                  disabled={booking}
-                  className="bg-gray-800 hover:bg-blue-600 disabled:opacity-50 px-4 py-3 rounded-lg text-sm font-medium transition"
-                >
-                  {time}
-                </button>
-              ))}
+              {daySlots.map((slot) => {
+                const { time } = formatSlot(slot.start)
+                return (
+                  <button
+                    key={slot.start}
+                    onClick={() => bookSlot(slot)}
+                    disabled={booking}
+                    className="bg-gray-800 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-3 rounded-lg text-sm font-medium transition"
+                  >
+                    {time}
+                  </button>
+                )
+              })}
             </div>
           </div>
         ))}
         
-        <div className="text-center mt-12 text-xs text-gray-600">
-          Lead ID: {leadId}
+        {/* No slots */}
+        {!loading && slots.length === 0 && (
+          <div className="text-center py-12 text-gray-500">
+            No available times found. Please check back later.
+          </div>
+        )}
+        
+        {/* Footer */}
+        <div className="text-center mt-12 pb-8">
+          <p className="text-xs text-gray-600">
+            Powered by XenTeck Speed-to-Lead
+          </p>
         </div>
       </div>
     </div>
