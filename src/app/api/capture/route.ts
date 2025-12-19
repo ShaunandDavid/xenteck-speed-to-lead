@@ -57,6 +57,11 @@ export async function POST(req: NextRequest) {
     }
     
     await redis.hset(`lead:${leadId}`, leadData)
+
+    // Track lead in sets for stats queries
+    const today = new Date().toISOString().split('T')[0]
+    await redis.sadd('leads:all', leadId)
+    await redis.sadd(`leads:${today}`, leadId)
     
     // 4. Fire hot router (NON-BLOCKING - fire and forget)
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL

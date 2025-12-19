@@ -17,21 +17,21 @@ export async function GET(req: NextRequest) {
   try {
     const redis = Redis.fromEnv()
     
-    // Get recent leads (last 100)
-    const leadKeys = await redis.keys('lead:*')
-    const recentKeys = leadKeys.slice(0, 100)
+    // Get today's lead IDs from set
+    const today = new Date().toISOString().split('T')[0]
+    const todayLeadIds = await redis.smembers(`leads:${today}`) as string[]
+    const allLeadIds = await redis.smembers('leads:all') as string[]
     
+    // Fetch lead data
     const leads = await Promise.all(
-      recentKeys.map(async (key) => {
-        const data = await redis.hgetall(key) as Record<string, string>
-        return data
+      allLeadIds.slice(0, 100).map(async (leadId) => {
+        const data = await redis.hgetall(`lead:${leadId}`)
+        return data as Record<string, string>
       })
     )
     
-    // Filter to today's leads
-    const today = new Date().toISOString().split('T')[0]
-    const todayLeads = leads.filter(lead => 
-      lead.created_at?.startsWith(today)
+    const todayLeads = leads.filter(lead =>
+      lead && todayLeadIds.includes(lead.id)
     )
     
     // Calculate latency metrics
