@@ -23,6 +23,20 @@ type ActionResult = {
   error?: string
 }
 
+function buildActionResult(
+  channel: ActionResult['channel'],
+  ok: boolean,
+  completedAt: number,
+  error?: string
+): ActionResult {
+  return {
+    channel,
+    ok,
+    completed_at: completedAt,
+    ...(error ? { error } : {})
+  }
+}
+
 export async function POST(req: NextRequest) {
   const t0 = Date.now()
   
@@ -91,21 +105,11 @@ export async function POST(req: NextRequest) {
             const completedAt = Date.now()
             if (!res.ok) {
               const errorText = await res.text().catch(() => '')
-              return {
-                channel: 'sms',
-                ok: false,
-                completed_at: completedAt,
-                error: errorText || `HTTP ${res.status}`
-              }
+              return buildActionResult('sms', false, completedAt, errorText || `HTTP ${res.status}`)
             }
-            return { channel: 'sms', ok: true, completed_at: completedAt }
+            return buildActionResult('sms', true, completedAt)
           })
-          .catch(err => ({
-            channel: 'sms',
-            ok: false,
-            completed_at: Date.now(),
-            error: err?.message || 'sms_failed'
-          }))
+          .catch(err => buildActionResult('sms', false, Date.now(), err?.message || 'sms_failed'))
       )
     }
     
@@ -121,21 +125,11 @@ export async function POST(req: NextRequest) {
             const completedAt = Date.now()
             if (!res.ok) {
               const errorText = await res.text().catch(() => '')
-              return {
-                channel: 'email',
-                ok: false,
-                completed_at: completedAt,
-                error: errorText || `HTTP ${res.status}`
-              }
+              return buildActionResult('email', false, completedAt, errorText || `HTTP ${res.status}`)
             }
-            return { channel: 'email', ok: true, completed_at: completedAt }
+            return buildActionResult('email', true, completedAt)
           })
-          .catch(err => ({
-            channel: 'email',
-            ok: false,
-            completed_at: Date.now(),
-            error: err?.message || 'email_failed'
-          }))
+          .catch(err => buildActionResult('email', false, Date.now(), err?.message || 'email_failed'))
       )
     }
     

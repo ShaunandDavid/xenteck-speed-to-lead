@@ -29,3 +29,9 @@ Files:
 
 Files:
 - `src/app/api/capture/route.ts`
+
+### Build fix: router action typing
+- Added a typed helper for action results to keep `channel` literals (`'sms' | 'email'`) and satisfy TypeScript in the router.
+
+Files:
+- `src/app/api/router/route.ts`
