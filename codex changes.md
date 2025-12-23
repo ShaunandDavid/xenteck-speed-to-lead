@@ -23,3 +23,9 @@ Files:
 - `src/app/page.tsx`
 - `src/lib/types.ts`
 - `src/lib/redis.ts`
+
+### Build fix: form data parsing
+- Replaced `formData.entries()` iteration with `formData.forEach()` to avoid TS downlevel iteration errors.
+
+Files:
+- `src/app/api/capture/route.ts`

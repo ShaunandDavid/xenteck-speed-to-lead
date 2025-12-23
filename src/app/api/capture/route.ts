@@ -35,9 +35,9 @@ async function parseBody(req: NextRequest): Promise<LeadPayload> {
   if (contentType.includes('multipart/form-data')) {
     const formData = await req.formData()
     const data: Record<string, string> = {}
-    for (const [key, value] of formData.entries()) {
+    formData.forEach((value, key) => {
       data[key] = typeof value === 'string' ? value : value.name
-    }
+    })
     return data
   }
 
