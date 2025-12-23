@@ -32,9 +32,9 @@ export async function GET() {
 
     const validLeads = leads.filter(lead => lead && lead.id) as Record<string, string>[]
 
-    // Calculate latency metrics from today's leads
+    // Calculate latency metrics from today's leads (first touch when available)
     const latencies = validLeads
-      .map(lead => parseInt(lead.total_latency_ms || '0'))
+      .map(lead => parseInt(lead.first_touch_latency_ms || lead.total_latency_ms || '0'))
       .filter(l => l > 0)
       .sort((a, b) => a - b)
 
@@ -75,6 +75,7 @@ export async function GET() {
         id: lead.id,
         name: lead.name,
         source: lead.source,
+        first_touch_latency_ms: lead.first_touch_latency_ms || lead.total_latency_ms,
         total_latency_ms: lead.total_latency_ms,
         target_met: lead.target_5s_met,
         status: lead.status,

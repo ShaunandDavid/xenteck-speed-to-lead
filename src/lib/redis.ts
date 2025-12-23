@@ -30,10 +30,12 @@ export interface Lead {
   created_at: string
   // Latency tracking
   total_latency_ms?: number
+  first_touch_latency_ms?: number
   router_latency_ms?: number
   sms_latency_ms?: number
   email_latency_ms?: number
   target_5s_met?: string
+  t_first_touch?: number
   // SMS fields
   sms_sid?: string
   sms_status?: string

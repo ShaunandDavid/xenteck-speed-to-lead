@@ -22,10 +22,12 @@ export interface Lead extends LeadSubmission {
   created_at: string
   // Tracking
   total_latency_ms?: number
+  first_touch_latency_ms?: number
   router_latency_ms?: number
   sms_latency_ms?: number
   email_latency_ms?: number
   target_5s_met?: 'YES' | 'NO'
+  t_first_touch?: number
   // SMS
   sms_sid?: string
   sms_status?: string
@@ -67,6 +69,7 @@ export interface RouterResponse {
   leadId: string
   router_latency_ms: number
   total_latency_ms: number
+  first_touch_latency_ms?: number | null
   target_5s_met: 'YES' | 'NO'
   actions_dispatched: number
   reason?: string
@@ -115,6 +118,7 @@ export interface StatsResponse {
     id: string
     name: string
     source: string
+    first_touch_latency_ms: string
     total_latency_ms: string
     target_met: string
     status: string

@@ -25,6 +25,7 @@ interface Stats {
     id: string
     name: string
     source: string
+    first_touch_latency_ms: string
     total_latency_ms: string
     target_met: string
     status: string
@@ -83,11 +84,11 @@ export default function Dashboard() {
             sublabel="Under 5 seconds"
           />
           <StatCard 
-            label="p95 Latency" 
+            label="p95 First Touch" 
             value={`${stats?.latency_metrics.p95_ms || 0}ms`}
           />
           <StatCard 
-            label="p99 Latency" 
+            label="p99 First Touch" 
             value={`${stats?.latency_metrics.p99_ms || 0}ms`}
           />
         </div>
@@ -113,7 +114,7 @@ export default function Dashboard() {
                 <tr className="text-gray-400 text-left">
                   <th className="pb-3">Name</th>
                   <th className="pb-3">Source</th>
-                  <th className="pb-3">Latency</th>
+                  <th className="pb-3">First Touch</th>
                   <th className="pb-3">Target</th>
                   <th className="pb-3">Status</th>
                 </tr>
@@ -124,13 +125,16 @@ export default function Dashboard() {
                     <td className="py-3">{lead.name || 'Unknown'}</td>
                     <td className="py-3 text-gray-400">{lead.source}</td>
                     <td className="py-3">
-                      <span className={
-                        parseInt(lead.total_latency_ms) < 5000 
-                          ? 'text-green-400' 
-                          : 'text-red-400'
-                      }>
-                        {lead.total_latency_ms}ms
-                      </span>
+                      {(() => {
+                        const latencyValue = lead.first_touch_latency_ms || lead.total_latency_ms
+                        if (!latencyValue) {
+                          return <span className="text-gray-500">N/A</span>
+                        }
+
+                        const latencyMs = parseInt(latencyValue, 10)
+                        const latencyClass = latencyMs < 5000 ? 'text-green-400' : 'text-red-400'
+                        return <span className={latencyClass}>{latencyValue}ms</span>
+                      })()}
                     </td>
                     <td className="py-3">
                       {lead.target_met === 'YES' ? (

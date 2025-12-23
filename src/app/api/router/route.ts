@@ -16,6 +16,13 @@
 import { Redis } from '@upstash/redis'
 import { NextRequest } from 'next/server'
 
+type ActionResult = {
+  channel: 'sms' | 'email'
+  ok: boolean
+  completed_at: number
+  error?: string
+}
+
 export async function POST(req: NextRequest) {
   const t0 = Date.now()
   
@@ -70,7 +77,7 @@ export async function POST(req: NextRequest) {
     // 6. Fire parallel actions (SMS + Email)
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `https://${process.env.VERCEL_URL}`
     
-    const actions = []
+    const actions: Array<Promise<ActionResult>> = []
     
     // Fire SMS if phone exists
     if (lead.phone) {
@@ -79,7 +86,26 @@ export async function POST(req: NextRequest) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ leadId, lead })
-        }).catch(err => ({ error: 'sms_failed', details: err.message }))
+        })
+          .then(async (res) => {
+            const completedAt = Date.now()
+            if (!res.ok) {
+              const errorText = await res.text().catch(() => '')
+              return {
+                channel: 'sms',
+                ok: false,
+                completed_at: completedAt,
+                error: errorText || `HTTP ${res.status}`
+              }
+            }
+            return { channel: 'sms', ok: true, completed_at: completedAt }
+          })
+          .catch(err => ({
+            channel: 'sms',
+            ok: false,
+            completed_at: Date.now(),
+            error: err?.message || 'sms_failed'
+          }))
       )
     }
     
@@ -90,36 +116,68 @@ export async function POST(req: NextRequest) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ leadId, lead })
-        }).catch(err => ({ error: 'email_failed', details: err.message }))
+        })
+          .then(async (res) => {
+            const completedAt = Date.now()
+            if (!res.ok) {
+              const errorText = await res.text().catch(() => '')
+              return {
+                channel: 'email',
+                ok: false,
+                completed_at: completedAt,
+                error: errorText || `HTTP ${res.status}`
+              }
+            }
+            return { channel: 'email', ok: true, completed_at: completedAt }
+          })
+          .catch(err => ({
+            channel: 'email',
+            ok: false,
+            completed_at: Date.now(),
+            error: err?.message || 'email_failed'
+          }))
       )
     }
     
     // Wait for all actions to complete
-    const results = await Promise.allSettled(actions)
+    const results = await Promise.all(actions)
     
     // 7. Calculate latencies
     const routerLatency = Date.now() - t0
     const totalLatency = Date.now() - captureTime
-    const targetMet = totalLatency < 5000 ? 'YES' : 'NO'
+    const firstTouchAt = results
+      .filter(result => result.ok)
+      .map(result => result.completed_at)
+      .sort((a, b) => a - b)[0]
+    const firstTouchLatency = firstTouchAt ? firstTouchAt - captureTime : null
+    const targetMet = firstTouchLatency !== null && firstTouchLatency < 5000 ? 'YES' : 'NO'
     
     // 8. Update lead status with final metrics
-    await redis.hset(`lead:${leadId}`, { 
+    const leadUpdate: Record<string, string | number> = { 
       status: 'routed',
       t2_routed: Date.now(),
       router_latency_ms: routerLatency,
       total_latency_ms: totalLatency,
       target_5s_met: targetMet,
       actions_dispatched: actions.length
-    })
+    }
+
+    if (firstTouchLatency !== null) {
+      leadUpdate.first_touch_latency_ms = firstTouchLatency
+      leadUpdate.t_first_touch = firstTouchAt
+    }
+
+    await redis.hset(`lead:${leadId}`, leadUpdate)
     
     return Response.json({ 
       status: 'routed',
       leadId,
       router_latency_ms: routerLatency,
       total_latency_ms: totalLatency,
+      first_touch_latency_ms: firstTouchLatency,
       target_5s_met: targetMet,
       actions_dispatched: actions.length,
-      results: results.map(r => r.status)
+      results: results.map(result => (result.ok ? 'fulfilled' : 'rejected'))
     })
     
   } catch (error) {

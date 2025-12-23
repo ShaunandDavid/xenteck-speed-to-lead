@@ -12,3 +12,14 @@
 
 Files:
 - `src/app/api/capture/route.ts`
+
+### First touch latency (fastest channel wins)
+- Router now measures `first_touch_latency_ms` (earliest successful SMS or email) and uses it for the 5s target.
+- Stats + dashboard now report first-touch latency for metrics and recent leads.
+
+Files:
+- `src/app/api/router/route.ts`
+- `src/app/api/stats/route.ts`
+- `src/app/page.tsx`
+- `src/lib/types.ts`
+- `src/lib/redis.ts`
