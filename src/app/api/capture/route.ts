@@ -10,11 +10,55 @@ import { NextRequest } from 'next/server'
 
 export const runtime = 'edge'
 
+type LeadPayload = {
+  name?: string
+  email?: string
+  phone?: string
+  source?: string
+  headache?: string
+  website?: string
+}
+
+async function parseBody(req: NextRequest): Promise<LeadPayload> {
+  const contentType = req.headers.get('content-type') || ''
+
+  if (contentType.includes('application/json')) {
+    const json = await req.json()
+    return typeof json === 'object' && json ? json : {}
+  }
+
+  if (contentType.includes('application/x-www-form-urlencoded')) {
+    const text = await req.text()
+    return Object.fromEntries(new URLSearchParams(text))
+  }
+
+  if (contentType.includes('multipart/form-data')) {
+    const formData = await req.formData()
+    const data: Record<string, string> = {}
+    for (const [key, value] of formData.entries()) {
+      data[key] = typeof value === 'string' ? value : value.name
+    }
+    return data
+  }
+
+  const text = await req.text()
+  if (!text) {
+    return {}
+  }
+
+  try {
+    const json = JSON.parse(text)
+    return typeof json === 'object' && json ? json : {}
+  } catch {
+    return Object.fromEntries(new URLSearchParams(text))
+  }
+}
+
 export async function POST(req: NextRequest) {
   const t0 = Date.now()
 
   try {
-    const body = await req.json()
+    const body = await parseBody(req)
     const { name, email, phone, source, headache, website } = body
 
     if (!email && !phone) {
