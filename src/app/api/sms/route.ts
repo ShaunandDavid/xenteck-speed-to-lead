@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
     
     const messageBody = `Hey ${firstName} - XenTeck here. Book a quick 15-min call: ${calendarLink} Reply STOP to opt out.`
     
-    let phone = lead.phone.replace(/\D/g, '')
+    let phone = lead.phone.replace(/\\D/g, '')
     if (phone.length === 10) phone = '1' + phone
     if (!phone.startsWith('+')) phone = '+' + phone
     
