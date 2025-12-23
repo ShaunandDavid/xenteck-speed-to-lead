@@ -1,16 +1,15 @@
 /**
- * LIGHTNING SMS
- * =============
- * Sends immediate SMS via Twilio with booking link.
+ * LIGHTNING SMS - SlickText
+ * =========================
+ * Sends immediate SMS via SlickText API with booking link.
+ * Swap to Twilio when 10DLC approval clears.
  * 
- * Message template:
- * "Hey {firstName}, I've got a few minutes right now if you want to talk.
- * If you're busy: {bookingLink} — just tell me what works best for you. - {agentName}"
+ * SlickText API: POST https://api.slicktext.com/v1/messages/
+ * Auth: HTTP Basic (public_key:private_key)
  */
 
 import { Redis } from '@upstash/redis'
 import { NextRequest } from 'next/server'
-import twilio from 'twilio'
 
 export async function POST(req: NextRequest) {
   const t0 = Date.now()
@@ -22,53 +21,78 @@ export async function POST(req: NextRequest) {
       return Response.json({ error: 'No phone number' }, { status: 400 })
     }
     
-    // Initialize Twilio client
-    const client = twilio(
-      process.env.TWILIO_ACCOUNT_SID,
-      process.env.TWILIO_AUTH_TOKEN
-    )
-    
     // Extract first name
     const firstName = lead.name?.split(' ')[0] || 'there'
-    const agentName = process.env.AGENT_NAME || 'Shaun'
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `https://${process.env.VERCEL_URL}`
-    const bookingLink = `${baseUrl}/book/${leadId}`
+    const calendarLink = process.env.CALENDAR_LINK || 'https://calendar.app.google/8D2uSEALucdV3Krz9'
     
-    // Craft the message - human, direct, gives options
-    const messageBody = `Hey ${firstName}, I've got a few minutes right now if you want to talk. If you're busy: ${bookingLink} — just tell me what works best for you. - ${agentName}`
+    // Craft message (keep under 160 chars for single SMS)
+    const messageBody = `Hey ${firstName} — it's XenTeck. Thanks for reaching out 👋\nBook a quick 15-min call: ${calendarLink}\nReply STOP to opt out.`
     
-    // Send SMS
-    const message = await client.messages.create({
-      to: lead.phone,
-      from: process.env.TWILIO_PHONE_NUMBER,
-      body: messageBody
+    // Format phone for SlickText (needs +1 prefix)
+    let phone = lead.phone.replace(/\D/g, '')
+    if (phone.length === 10) phone = '1' + phone
+    if (!phone.startsWith('+')) phone = '+' + phone
+    
+    // SlickText API credentials
+    const publicKey = process.env.SLICKTEXT_PUBLIC_KEY
+    const privateKey = process.env.SLICKTEXT_PRIVATE_KEY
+    const textwordId = process.env.SLICKTEXT_TEXTWORD_ID
+    
+    if (!publicKey || !privateKey || !textwordId) {
+      throw new Error('SlickText credentials not configured')
+    }
+    
+    // HTTP Basic auth
+    const authString = Buffer.from(`${publicKey}:${privateKey}`).toString('base64')
+    
+    // Send SMS via SlickText
+    const response = await fetch('https://api.slicktext.com/v1/messages/', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${authString}`,
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: new URLSearchParams({
+        action: 'SEND',
+        textword: textwordId,
+        number: phone,
+        body: messageBody
+      }).toString()
     })
     
+    const result = await response.json()
     const smsLatency = Date.now() - t0
+    
+    if (!response.ok || result.error) {
+      throw new Error(result.error || result.message || `SlickText error: ${response.status}`)
+    }
     
     // Log to Redis
     const redis = Redis.fromEnv()
     await redis.hset(`lead:${leadId}`, {
-      sms_sid: message.sid,
-      sms_status: message.status,
+      sms_provider: 'slicktext',
+      sms_message_id: result.messageId || result.id || 'sent',
+      sms_status: 'sent',
       sms_latency_ms: smsLatency,
       sms_sent_at: new Date().toISOString(),
       t_sms_sent: Date.now()
     })
     
-    // Also log to SMS history for analytics
-    await redis.lpush(`sms:history`, JSON.stringify({
+    // Log to SMS history for analytics
+    await redis.lpush('sms:history', JSON.stringify({
       leadId,
-      sid: message.sid,
-      to: lead.phone,
-      status: message.status,
+      provider: 'slicktext',
+      messageId: result.messageId || result.id,
+      to: phone,
+      status: 'sent',
       latency_ms: smsLatency,
       sent_at: new Date().toISOString()
     }))
     
     return Response.json({
       status: 'sent',
-      sid: message.sid,
+      provider: 'slicktext',
+      messageId: result.messageId || result.id,
       latency_ms: smsLatency
     })
     
@@ -78,9 +102,10 @@ export async function POST(req: NextRequest) {
     
     // Log the failure
     try {
-      const { leadId } = await req.json()
+      const body = await req.clone().json()
       const redis = Redis.fromEnv()
-      await redis.hset(`lead:${leadId}`, {
+      await redis.hset(`lead:${body.leadId}`, {
+        sms_provider: 'slicktext',
         sms_status: 'failed',
         sms_error: (error as Error).message,
         sms_latency_ms: errorLatency
@@ -92,6 +117,7 @@ export async function POST(req: NextRequest) {
     return Response.json(
       { 
         error: 'SMS failed',
+        provider: 'slicktext',
         details: (error as Error).message,
         latency_ms: errorLatency
       },
