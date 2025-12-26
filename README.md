@@ -35,11 +35,11 @@ npm install
 2. Create account → Create Redis database
 3. Copy `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`
 
-### 3. Set Up Twilio (Pay-as-you-go)
+### 3. Set Up Telnyx (Pay-as-you-go)
 
-1. Go to [twilio.com/console](https://twilio.com/console)
-2. Get Account SID and Auth Token
-3. Buy a phone number (~$1/month)
+1. Go to [portal.telnyx.com](https://portal.telnyx.com)
+2. Create an API key
+3. Buy/assign a sending phone number
 
 ### 4. Set Up Google OAuth (FREE)
 
@@ -114,7 +114,7 @@ src/
 │   ├── api/
 │   │   ├── capture/route.ts   ← Edge function, entry point
 │   │   ├── router/route.ts    ← Hot router, dedupe
-│   │   ├── sms/route.ts       ← Twilio SMS
+│   │   ├── sms/route.ts       ← Telnyx SMS
 │   │   ├── email/route.ts     ← Gmail API
 │   │   ├── book/route.ts      ← Calendar booking
 │   │   └── stats/route.ts     ← Dashboard metrics
@@ -132,7 +132,7 @@ src/
 |---------|------|------|
 | Vercel | Hobby | $0 |
 | Upstash Redis | Free | $0 (10k commands/day) |
-| Twilio | Pay-as-you-go | ~$0.0079/SMS |
+| Telnyx | Pay-as-you-go | ~$0.0079/SMS |
 | Gmail API | Free | $0 |
 | Google Calendar | Free | $0 |
 

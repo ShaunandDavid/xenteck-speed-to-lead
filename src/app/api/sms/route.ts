@@ -1,8 +1,7 @@
 /**
- * LIGHTNING SMS - SlickText
- * =========================
- * Sends immediate SMS via SlickText API with booking link.
- * Swap to Twilio when 10DLC approval clears.
+ * LIGHTNING SMS - Telnyx
+ * ======================
+ * Sends immediate SMS via Telnyx API with booking link.
  */
 
 import { Redis } from '@upstash/redis'
@@ -18,51 +17,59 @@ export async function POST(req: NextRequest) {
       return Response.json({ error: 'No phone number' }, { status: 400 })
     }
 
-    const firstName = lead.name?.split(' ')[0] || 'there'
     const calendarLink = process.env.CALENDAR_LINK || 'https://calendar.app.google/8D2uSEALucdV3Krz9'
 
-    const messageBody = `Hey ${firstName} - XenTeck here. Book a quick 15-min call: ${calendarLink} Reply STOP to opt out.`
+    const displayName = lead.name?.trim() || 'there'
+    const messageBody = `Hey ${displayName},
+
+Thanks for reaching out! I saw your message and wanted to respond right away.
+
+I've got a few minutes right now if you'd like to connect. If you're busy, no problem - here's my calendar:
+
+${calendarLink}
+
+Just pick a time that works for you.
+
+Looking forward to chatting,
+XenTeck`
 
     let phone = lead.phone.replace(/\D/g, '')
     if (phone.length === 10) phone = '1' + phone
     if (!phone.startsWith('+')) phone = '+' + phone
 
-    const publicKey = process.env.SLICKTEXT_PUBLIC_KEY
-    const privateKey = process.env.SLICKTEXT_PRIVATE_KEY
-    const textwordId = process.env.SLICKTEXT_TEXTWORD_ID
+    const apiKey = process.env.TELNYX_API_KEY
+    const fromNumber = process.env.TELNYX_FROM_NUMBER
 
-    if (!publicKey || !privateKey || !textwordId) {
-      throw new Error('SlickText credentials not configured')
+    if (!apiKey || !fromNumber) {
+      throw new Error('Telnyx credentials not configured')
     }
 
-    const authString = Buffer.from(`${publicKey}:${privateKey}`).toString('base64')
-
-    const response = await fetch('https://api.slicktext.com/v1/messages/', {
+    const response = await fetch('https://api.telnyx.com/v2/messages', {
       method: 'POST',
       headers: {
-        'Authorization': `Basic ${authString}`,
-        'Content-Type': 'application/x-www-form-urlencoded'
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
       },
-      body: new URLSearchParams({
-        action: 'SEND',
-        textword: textwordId,
-        number: phone,
-        body: messageBody
-      }).toString()
+      body: JSON.stringify({
+        from: fromNumber,
+        to: phone,
+        text: messageBody
+      })
     })
 
     const result = await response.json()
     const smsLatency = Date.now() - t0
 
-    if (!response.ok || result.error) {
-      throw new Error(result.error || result.message || 'SlickText error')
+    if (!response.ok || !result?.data?.id) {
+      const message = result?.errors?.[0]?.detail || result?.message || 'Telnyx error'
+      throw new Error(message)
     }
 
     const redis = Redis.fromEnv()
     await redis.hset(`lead:${leadId}`, {
-      sms_provider: 'slicktext',
-      sms_message_id: result.messageId || 'sent',
-      sms_status: 'sent',
+      sms_provider: 'telnyx',
+      sms_message_id: result.data.id,
+      sms_status: result.data.status || 'queued',
       sms_latency_ms: smsLatency,
       sms_sent_at: new Date().toISOString(),
       t_sms_sent: Date.now()
@@ -70,16 +77,16 @@ export async function POST(req: NextRequest) {
 
     await redis.lpush('sms:history', JSON.stringify({
       leadId,
-      provider: 'slicktext',
+      provider: 'telnyx',
       to: phone,
-      status: 'sent',
+      status: result.data.status || 'queued',
       latency_ms: smsLatency,
       sent_at: new Date().toISOString()
     }))
 
     return Response.json({
       status: 'sent',
-      provider: 'slicktext',
+      provider: 'telnyx',
       latency_ms: smsLatency
     })
 

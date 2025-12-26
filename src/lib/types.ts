@@ -96,32 +96,18 @@ export interface BookingSlot {
 }
 
 export interface StatsResponse {
-  date: string
-  total_leads_today: number
-  total_leads_all_time: number
-  latency_metrics: {
-    p50_ms: number
-    p95_ms: number
-    p99_ms: number
-    samples: number
-  }
-  target_5s: {
-    hit_rate_percent: string
-    under_5s: number
-    over_5s: number
-  }
-  actions: {
-    sms_sent: number
-    emails_sent: number
-  }
+  range_days: number
+  leads_tracked: number
+  time_to_booking_p95_ms: number
+  fastest_time_ms: number
+  under_5s_rate_percent: string
+  delivery_success_rate_percent: string
   recent_leads: Array<{
     id: string
-    name: string
-    source: string
-    first_touch_latency_ms: string
-    total_latency_ms: string
-    target_met: string
-    status: string
-    created_at: string
+    submitted_at: string
+    channel: 'Email' | 'SMS' | 'Both'
+    latency_ms: number | null
+    status: 'Sent' | 'Accepted' | 'Failed' | 'Bounced'
+    fallback: 'Y' | 'N'
   }>
 }

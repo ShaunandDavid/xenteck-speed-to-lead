@@ -3,34 +3,32 @@
 import { useEffect, useState } from 'react'
 
 interface Stats {
-  date: string
-  total_leads_today: number
-  total_leads_all_time: number
-  latency_metrics: {
-    p50_ms: number
-    p95_ms: number
-    p99_ms: number
-    samples: number
-  }
-  target_5s: {
-    hit_rate_percent: string
-    under_5s: number
-    over_5s: number
-  }
-  actions: {
-    sms_sent: number
-    emails_sent: number
-  }
+  range_days: number
+  leads_tracked: number
+  time_to_booking_p95_ms: number
+  fastest_time_ms: number
+  under_5s_rate_percent: string
+  delivery_success_rate_percent: string
   recent_leads: Array<{
     id: string
-    name: string
-    source: string
-    first_touch_latency_ms: string
-    total_latency_ms: string
-    target_met: string
-    status: string
-    created_at: string
+    submitted_at: string
+    channel: 'Email' | 'SMS' | 'Both'
+    latency_ms: number | null
+    status: 'Sent' | 'Accepted' | 'Failed' | 'Bounced'
+    fallback: 'Y' | 'N'
   }>
+}
+
+function formatSeconds(latencyMs?: number | null): string {
+  if (!latencyMs || latencyMs <= 0) return 'N/A'
+  return `${(latencyMs / 1000).toFixed(1)}s`
+}
+
+function formatTimestamp(value?: string): string {
+  if (!value) return 'N/A'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString()
 }
 
 export default function Dashboard() {
@@ -74,78 +72,69 @@ export default function Dashboard() {
         
         {/* Stats Grid */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <StatCard 
-            label="Leads Today" 
-            value={stats?.total_leads_today || 0} 
+          <StatCard
+            label="Time to Booking Link Sent (p95)"
+            value={formatSeconds(stats?.time_to_booking_p95_ms)}
+            badge={`Fastest recorded: ${formatSeconds(stats?.fastest_time_ms)}`}
           />
-          <StatCard 
-            label="Target Hit Rate" 
-            value={`${stats?.target_5s.hit_rate_percent || 0}%`}
-            sublabel="Under 5 seconds"
+          <StatCard
+            label="Under-5s SLA Pass Rate"
+            value={`${stats?.under_5s_rate_percent || '0'}%`}
           />
-          <StatCard 
-            label="p95 First Touch" 
-            value={`${stats?.latency_metrics.p95_ms || 0}ms`}
+          <StatCard
+            label="Delivery Success Rate"
+            value={`${stats?.delivery_success_rate_percent || '0'}%`}
           />
-          <StatCard 
-            label="p99 First Touch" 
-            value={`${stats?.latency_metrics.p99_ms || 0}ms`}
+          <StatCard
+            label="Leads Tracked (last 7 days)"
+            value={(stats?.leads_tracked ?? 0).toLocaleString()}
           />
         </div>
         
-        {/* Actions Stats */}
-        <div className="grid grid-cols-2 gap-4 mb-8">
-          <div className="bg-gray-900 rounded-xl p-6">
-            <div className="text-2xl font-bold text-green-400">{stats?.actions.sms_sent || 0}</div>
-            <div className="text-gray-400 text-sm">SMS Sent</div>
-          </div>
-          <div className="bg-gray-900 rounded-xl p-6">
-            <div className="text-2xl font-bold text-blue-400">{stats?.actions.emails_sent || 0}</div>
-            <div className="text-gray-400 text-sm">Emails Sent</div>
-          </div>
-        </div>
-        
-        {/* Recent Leads */}
+        {/* Proof Table */}
         <div className="bg-gray-900 rounded-xl p-6">
-          <h2 className="text-xl font-semibold mb-4">Recent Leads</h2>
+          <h2 className="text-xl font-semibold mb-4">Proof Table</h2>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-gray-400 text-left">
-                  <th className="pb-3">Name</th>
-                  <th className="pb-3">Source</th>
-                  <th className="pb-3">First Touch</th>
-                  <th className="pb-3">Target</th>
+                  <th className="pb-3">Submitted</th>
+                  <th className="pb-3">Channel</th>
+                  <th className="pb-3">Latency</th>
                   <th className="pb-3">Status</th>
+                  <th className="pb-3">Fallback</th>
                 </tr>
               </thead>
               <tbody>
                 {stats?.recent_leads.map((lead) => (
                   <tr key={lead.id} className="border-t border-gray-800">
-                    <td className="py-3">{lead.name || 'Unknown'}</td>
-                    <td className="py-3 text-gray-400">{lead.source}</td>
+                    <td className="py-3 text-gray-300">{formatTimestamp(lead.submitted_at)}</td>
+                    <td className="py-3 text-gray-400">{lead.channel}</td>
                     <td className="py-3">
-                      {(() => {
-                        const latencyValue = lead.first_touch_latency_ms || lead.total_latency_ms
-                        if (!latencyValue) {
-                          return <span className="text-gray-500">N/A</span>
-                        }
-
-                        const latencyMs = parseInt(latencyValue, 10)
-                        const latencyClass = latencyMs < 5000 ? 'text-green-400' : 'text-red-400'
-                        return <span className={latencyClass}>{latencyValue}ms</span>
-                      })()}
+                      <span className={
+                        lead.latency_ms === null
+                          ? 'text-gray-500'
+                          : lead.latency_ms < 5000
+                            ? 'text-green-400'
+                            : 'text-red-400'
+                      }>
+                        {formatSeconds(lead.latency_ms)}
+                      </span>
                     </td>
                     <td className="py-3">
-                      {lead.target_met === 'YES' ? (
-                        <span className="text-green-400">✓</span>
-                      ) : (
-                        <span className="text-red-400">✗</span>
-                      )}
-                    </td>
-                    <td className="py-3">
-                      <span className="px-2 py-1 bg-gray-800 rounded text-xs">
+                      <span className={`px-2 py-1 rounded text-xs ${
+                        lead.status === 'Accepted' || lead.status === 'Sent'
+                          ? 'bg-green-500/10 text-green-300'
+                          : lead.status === 'Bounced'
+                            ? 'bg-orange-500/10 text-orange-300'
+                            : 'bg-red-500/10 text-red-300'
+                      }`}>
                         {lead.status}
+                      </span>
+                    </td>
+                    <td className="py-3">
+                      <span className={lead.fallback === 'Y' ? 'text-amber-300' : 'text-gray-500'}>
+                        {lead.fallback}
                       </span>
                     </td>
                   </tr>
@@ -154,7 +143,7 @@ export default function Dashboard() {
             </table>
           </div>
         </div>
-        
+
         {/* Test Form */}
         <div className="mt-8 bg-gray-900 rounded-xl p-6">
           <h2 className="text-xl font-semibold mb-4">Test Lead Capture</h2>
@@ -165,12 +154,27 @@ export default function Dashboard() {
   )
 }
 
-function StatCard({ label, value, sublabel }: { label: string; value: string | number; sublabel?: string }) {
+function StatCard({
+  label,
+  value,
+  sublabel,
+  badge
+}: {
+  label: string
+  value: string | number
+  sublabel?: string
+  badge?: string
+}) {
   return (
     <div className="bg-gray-900 rounded-xl p-6">
       <div className="text-3xl font-bold">{value}</div>
       <div className="text-gray-400 text-sm">{label}</div>
       {sublabel && <div className="text-gray-600 text-xs mt-1">{sublabel}</div>}
+      {badge && (
+        <div className="mt-2 inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-300">
+          {badge}
+        </div>
+      )}
     </div>
   )
 }
@@ -201,7 +205,13 @@ function TestForm({ onSubmit }: { onSubmit: () => void }) {
       })
       
       const data = await res.json()
-      setResult(data)
+      if (data && typeof data === 'object') {
+        const displayData = { ...data }
+        delete (displayData as { capture_latency_ms?: number }).capture_latency_ms
+        setResult(displayData)
+      } else {
+        setResult(data)
+      }
       form.reset()
       
       // Refresh stats after a delay

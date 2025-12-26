@@ -10,11 +10,14 @@ import { NextRequest } from 'next/server'
 
 export async function POST(req: NextRequest) {
   const t0 = Date.now()
+  let leadId: string | undefined
 
   try {
-    const { leadId, lead } = await req.json()
+    const body = await req.json()
+    leadId = body.leadId
+    const lead = body.lead
 
-    if (!lead.email) {
+    if (!lead?.email) {
       return Response.json({ error: 'No email address' }, { status: 400 })
     }
 
@@ -91,6 +94,17 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     const errorLatency = Date.now() - t0
     console.error('Email error:', error)
+
+    if (leadId) {
+      try {
+        const redis = Redis.fromEnv()
+        await redis.hset(`lead:${leadId}`, {
+          email_status: 'failed',
+          email_error: (error as Error).message,
+          email_latency_ms: errorLatency
+        })
+      } catch {}
+    }
 
     return Response.json(
       { error: 'Email failed', details: (error as Error).message, latency_ms: errorLatency },
