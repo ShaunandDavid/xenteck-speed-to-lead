@@ -34,6 +34,7 @@ function formatTimestamp(value?: string): string {
 export default function Dashboard() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   
   useEffect(() => {
     fetchStats()
@@ -43,11 +44,19 @@ export default function Dashboard() {
   
   const fetchStats = async () => {
     try {
-      const res = await fetch('/api/stats')
+      const res = await fetch('/api/stats', { cache: 'no-store' })
       const data = await res.json()
+
+      if (!res.ok || (data && typeof data === 'object' && 'error' in data)) {
+        throw new Error((data as { error?: string })?.error || 'Failed to load stats')
+      }
+
       setStats(data)
+      setError(null)
     } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to fetch stats'
       console.error('Failed to fetch stats:', err)
+      setError(message)
     } finally {
       setLoading(false)
     }
@@ -68,6 +77,11 @@ export default function Dashboard() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2">⚡ Speed-to-Lead Dashboard</h1>
           <p className="text-gray-400">Real-time performance metrics</p>
+          {error && (
+            <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-300">
+              Stats API error: {error}
+            </div>
+          )}
         </div>
         
         {/* Stats Grid */}
@@ -106,7 +120,7 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody>
-                {stats?.recent_leads.map((lead) => (
+                {(stats?.recent_leads ?? []).map((lead) => (
                   <tr key={lead.id} className="border-t border-gray-800">
                     <td className="py-3 text-gray-300">{formatTimestamp(lead.submitted_at)}</td>
                     <td className="py-3 text-gray-400">{lead.channel}</td>

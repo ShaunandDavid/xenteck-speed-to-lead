@@ -1,9 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Enable edge runtime for API routes
-  experimental: {
-    serverActions: true,
-  },
+  // No experimental flags needed for Next 14.
 }
 
 module.exports = nextConfig
